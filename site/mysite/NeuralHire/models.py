@@ -7,3 +7,6 @@ class Job(models.Model):
     addition = models.TextField()
     city = models.CharField(max_length=255)
     link = models.TextField()
+
+    def __str__(self):
+        return self.title
