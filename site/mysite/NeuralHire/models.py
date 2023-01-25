@@ -1,6 +1,6 @@
 from django.db import models
 
-class Person(models.Model):
+class Job(models.Model):
     title = models.CharField(max_length=255)
     money = models.IntegerField(blank=True)
     knoladge = models.TextField()

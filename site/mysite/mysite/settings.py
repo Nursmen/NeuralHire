@@ -74,15 +74,15 @@ WSGI_APPLICATION = 'mysite.wsgi.application'
 # Database
 # https://docs.djangoproject.com/en/4.0/ref/settings/#databases
 
-DATABASES = {
-    'default': {
-        'ENGINE': 'django.db.backends.postgresql_psycopg2',
-        'NAME': 'neuralhire', 
-        'USER': 'sammy', 
-        'PASSWORD': 'pa$$word',
-        'HOST': '127.0.0.1', 
-        'PORT': '5432',
-    }
+DATABASES={
+   'default':{
+      'ENGINE':'django.db.backends.postgresql_psycopg2',
+      'NAME':'postgres',
+      'USER':'postgres',
+      'PASSWORD':'Nurs2007',
+      'HOST':'localhost',
+      'PORT':'5432',
+   }
 }
 
 
@@ -110,7 +110,7 @@ AUTH_PASSWORD_VALIDATORS = [
 
 LANGUAGE_CODE = 'en-us'
 
-TIME_ZONE = 'GMT+6'
+TIME_ZONE = 'UTC'
 
 USE_I18N = True
 
