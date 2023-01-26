@@ -37,9 +37,9 @@ INSTALLED_APPS = [
     'django.contrib.sessions',
     'django.contrib.messages',
     'django.contrib.staticfiles',
-    'NeuralHire.apps.NeuralhireConfig',
         # add this:
     'django_extensions',
+    'NeuralHire',
 ]
 
 MIDDLEWARE = [
