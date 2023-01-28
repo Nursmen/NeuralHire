@@ -1,28 +1,36 @@
 {% extends 'neuralhire/base.html' %}
 
 {% block content %}
-    <div class="inputs">
-        <p class="inputs-text"> Skills </p>
-        <input type="text" name="knoladge" class="inputs-input border-bottom border-dark-subtle border-3" value="Python SQL JavaScript">
-    </div>
-
-    <div class="inputs">
-        <p class="inputs-text">Additions</p>
-        <div class="list">
-            {% for addition in additions %}
-            <div class="list-data">
-                <input type="checkbox" name="{{addition}}" value="{{addition}}" id="{{addition}}">
-                <label for="{{addition}}">{{addition}}</label>
-            </div>
-            {% endfor %}
+    <form method="POST">
+        {% csrf_token %}
+        <div class="inputs">
+            <p class="inputs-text"> Skills </p>
+            <input type="text" name="knoladge" class="inputs-input border-bottom border-dark-subtle border-3" value="Python SQL JavaScript">
         </div>
-    </div>
-
-    <center>
-        <button type="submit" class="submit border border-2 border-dark">Prediction</button>
-    </center>
-
+        
+        <div class="inputs">
+            <p class="inputs-text">Additions</p>
+            <div class="list">
+                {% for addition in additions %}
+                <div class="list-data">
+                <input type="checkbox" name="{{addition}}" value="{{addition}}" id="{{addition}}" class="border-2 border-dark-subtle form-check-input checkbox">
+                <label for="{{addition}}">{{addition}}</label>
+                </div>
+                {% endfor %}
+            </div>
+        </div>
+    
+        <center>
+            <button type="submit" class="submit border border-2 border-dark">Prediction</button>
+        </center>
+    
+    </form>
     <style>
+        .checkbox {
+            height: 20px;
+            width: 20px;
+            margin-bottom: 8px;
+        }
         .submit {
             background-color: white;
             width: 225px;
