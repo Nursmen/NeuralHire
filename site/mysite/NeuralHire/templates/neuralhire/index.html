@@ -1,5 +1,69 @@
 {% extends 'neuralhire/base.html' %}
 
 {% block content %}
-    <p>Neural Hire</p>
+    <div class="inputs">
+        <p class="inputs-text"> Skills </p>
+        <input type="text" name="knoladge" class="inputs-input border-bottom border-dark-subtle border-3" value="Python SQL JavaScript">
+    </div>
+
+    <div class="inputs">
+        <p class="inputs-text">Additions</p>
+        <div class="list">
+            {% for addition in additions %}
+            <div class="list-data">
+                <input type="checkbox" name="{{addition}}" value="{{addition}}" id="{{addition}}">
+                <label for="{{addition}}">{{addition}}</label>
+            </div>
+            {% endfor %}
+        </div>
+    </div>
+
+    <center>
+        <button type="submit" class="submit border border-2 border-dark">Prediction</button>
+    </center>
+
+    <style>
+        .submit {
+            background-color: white;
+            width: 225px;
+            height: 50px;
+            animation: submit 2s infinite;
+        }
+        @keyframes submit {
+            0% {
+                box-shadow: none;
+            }
+            100% {
+                outline: 10px solid rgba(255, 255, 255, 0.3);
+            }
+        }
+        .list-data {
+            margin-bottom: 10px;
+            font-size: 18px;
+        }
+        .inputs {
+            margin-left: 50px;
+            margin-bottom: 50px;
+        }
+        .inputs-text {
+            font-family: Roboto Mono;
+            font-size: x-large;
+            font-weight: bold;
+            margin-bottom: 20px;
+        }
+        input {
+            padding-left: 10px;
+            border: none;
+        }
+        .inputs-input {
+            width: 500px;
+            font-size: 18px;
+        }
+        input:focus,
+        select:focus,
+        textarea:focus,
+        button:focus {
+            outline: none;
+        }
+    </style>
 {% endblock %}
