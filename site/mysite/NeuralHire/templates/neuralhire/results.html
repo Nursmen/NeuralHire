@@ -1,0 +1,64 @@
+{% extends 'neuralhire/base.html' %}
+
+{% block content %}
+
+
+<div class="result">
+    <p>
+        Предсказанная з/п: <span class="money">{{prediction}}</span> рублей
+    </p>
+    <p>
+        Можете посмотреть следующие вакансии:
+    </p>
+</div>
+
+<div class="container">
+    
+{% for job in jobs %}
+
+    <div class="card">
+        <div class="card-body">
+            <p>
+                {{job.title}}
+            </p>
+            <p>
+                {{job.money}} 000 рублей
+            </p>
+            <a href="{{job.link}}" class="card-link">ссылка на работу</a>
+        </div>
+    </div>
+    
+{% endfor %}
+
+</div>
+
+<div class="footer">
+    <p>
+        Сайт сделан Нарнынбаевым Нурсултаном.
+    </p>
+    <p>
+        Вакансии взяты: russia.superjob.ru
+    </p>
+</div>
+
+<style>
+    a {
+        color: #144272;
+    }
+    .money {
+        font-weight:bold;
+        color: #144272;
+    }
+    .footer {
+        margin-left: 50px;
+        padding-bottom: 20px;
+    }
+    .result {
+        margin-left: 50px;
+        margin-bottom: 30px;
+    }
+    .card {
+        margin-bottom: 30px;
+    }
+</style>
+{% endblock %}

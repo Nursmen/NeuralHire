@@ -17,5 +17,5 @@ def run():
                             knoladge=row[2],
                             addition = row[4],
                             city=row[5],
-                            link=row[-1])
+                            link=row[-1].replace('vacancy/search/?keywords=python/', ''))
                 job.save()
