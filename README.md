@@ -10,3 +10,7 @@ It is Django website connected to PostgresSQL. Base of the site is a model. Mode
 Model already done and just imports in view.py, so you can get your prediction faster. 
 
 > I use RandomForest classifier, because neural network is too complex to do and I also need to learn in school.
+
+# Video
+https://youtu.be/YMrMcVpLeU0
+> I appreciate your likes 😊
