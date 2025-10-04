@@ -14,3 +14,10 @@ Model already done and just imports in view.py, so you can get your prediction f
 # Video
 https://youtu.be/YMrMcVpLeU0
 > I appreciate your likes 😊
+
+# To create postgresql
+
+> while installing, don't forget to remember your login and password
+
+1. install postgresql (not pgAdmin, actual postgresql) `https://www.postgresql.org/download/windows/` 
+2. create a server
