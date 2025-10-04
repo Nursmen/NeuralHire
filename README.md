@@ -21,3 +21,7 @@ https://youtu.be/YMrMcVpLeU0
 
 1. install postgresql (not pgAdmin, actual postgresql) `https://www.postgresql.org/download/windows/` 
 2. create a server
+
+|
+| python manage.py import_jobs path/to/jobs.csv
+| 
