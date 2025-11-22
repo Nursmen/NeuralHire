@@ -1,51 +1,85 @@
+# management/commands/import_jobs.py
 import pandas as pd
 from django.core.management.base import BaseCommand
-from NeuralHire.models import *
+from NeuralHire.models import Job
+from utils.embeddings import embed_text
+import re
 
 class Command(BaseCommand):
-    help = 'Imports job data from jobs.csv into the Job model'
+    help = 'Import jobs from CSV and generate free local embeddings'
 
     def add_arguments(self, parser):
-        parser.add_argument('csv_file', type=str, help='Path to the jobs.csv file')
+        parser.add_argument('csv_file', type=str, help='Path to CSV file')
 
     def handle(self, *args, **options):
         csv_file = options['csv_file']
+        
         try:
-            # Read CSV file
             df = pd.read_csv(csv_file)
-            expected_columns = ['title', 'money', 'knoladge', 'company', 'addition', 'city', 'link']
-            if not all(col in df.columns for col in expected_columns):
-                self.stderr.write("Error: CSV file must contain columns: " + ", ".join(expected_columns))
-                return
-
-            # Clear existing data (optional, comment out if you want to append)
-            Job.objects.all().delete()
-            self.stdout.write("Cleared existing Job records.")
-
-            # Iterate over CSV rows and create Job instances
-            for _, row in df.iterrows():
-                # Handle missing or invalid data
-                title = str(row['title'])[:255] if pd.notna(row['title']) else 'Unknown'
-                money = int(row['money']) if pd.notna(row['money']) else 0
-                knoladge = str(row['knoladge']) if pd.notna(row['knoladge']) else ''
-                company = str(row['company'])[:255] if pd.notna(row['company']) else 'Unknown'
-                addition = str(row['addition']) if pd.notna(row['addition']) else ''
-                city = str(row['city'])[:255] if pd.notna(row['city']) else 'Unknown'
-                link = str(row['link']) if pd.notna(row['link']) else ''
-
-                # Create and save Job instance
-                Job.objects.create(
-                    title=title,
-                    money=money,
-                    knoladge=knoladge,
-                    addition=addition,
-                    city=city,
-                    link=link
-                )
-
-            self.stdout.write(self.style.SUCCESS(f"Successfully imported {len(df)} jobs from {csv_file}"))
-
+            self.stdout.write(self.style.SUCCESS(f"CSV loaded. Found {len(df)} rows."))
         except FileNotFoundError:
-            self.stderr.write(f"Error: File {csv_file} not found")
-        except Exception as e:
-            self.stderr.write(f"Error during import: {str(e)}")
+            self.stdout.write(self.style.ERROR("File not found."))
+            return
+
+        self.stdout.write("Deleting old jobs...")
+        Job.objects.all().delete()
+
+        jobs_to_create = []
+
+        count = 0
+        
+        for idx, row in df.iterrows():
+            title = str(row.get('title', 'Unknown'))[:255]
+            knoladge = str(row.get('knoladge', '') or '')
+            company = str(row.get('company', 'Unknown'))[:255]
+
+            raw_money = row.get('money')
+            if pd.isna(raw_money) or raw_money is None:
+                money = None
+            else:
+                raw = str(raw_money).strip().lower()
+                
+                if any(phrase in raw for phrase in ['по договорённости', 'договорная', 'не указана', 'negotiable']):
+                    money = -1
+                else:
+                    clean_raw = raw.replace(' ', '').replace('\xa0', '') # handles non-breaking spaces too
+
+                    match = re.search(r'\d+', clean_raw)
+                    
+                    if match:
+                        val = int(match.group())
+                        
+                        if val > 2147483647:
+                            money = -1 
+                        else:
+                            money = val
+                    else:
+                        money = -1
+
+            combined_text = f"{title}. {knoladge}".strip()
+            embedding = embed_text(combined_text)
+            if embedding is None or len(embedding) != 384:
+                embedding = None
+
+            job = Job(
+                title=title,
+                knoladge=knoladge,
+                company=company,
+                money=money,
+                addition=str(row.get('addition', '')),
+                city=str(row.get('city', 'Unknown'))[:255],
+                link=str(row.get('link', '')),
+                content_embedding=embedding,
+            )
+            jobs_to_create.append(job)
+            count += 1
+            
+            if count % 50 == 0:
+                self.stdout.write(f"Processed {count} rows...")
+
+        if jobs_to_create:
+            self.stdout.write("Saving to database...")
+            Job.objects.bulk_create(jobs_to_create)
+            self.stdout.write(self.style.SUCCESS(f"Successfully created {len(jobs_to_create)} jobs."))
+        else:
+            self.stdout.write(self.style.WARNING("No jobs found to create."))

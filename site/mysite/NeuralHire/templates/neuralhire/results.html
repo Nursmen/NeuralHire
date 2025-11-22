@@ -1,7 +1,8 @@
 {% extends 'neuralhire/base.html' %}
 
 {% block content %}
-
+{% load job_filters %}
+{{error}}
 
 <div class="result">
     <p>
@@ -13,28 +14,75 @@
 </div>
 
 <div class="container">
-    
+
 {% for job in jobs %}
 
     <div class="card">
         <div class="card-body">
+            <p>{{ job.title }}</h3>
             <p>
-                {{job.title}}
+                Зарплата: <span class="js-money-value">{{ job.money|floatformat:"0" }}</span> 000 рублей
             </p>
-            <p>
-                {{job.money}} 000 рублей
-            </p>
-            <a href="{{job.link}}" class="card-link">ссылка на работу</a>
+            
+            {% if job.addition %}
+            <ul class="addition-list">
+{% for item in job.addition|split_by_comma %}                <li>{{ item }}</li>
+                {% endfor %}
+            </ul>
+            {% endif %}
+
+            {% with corrected_link=job.link|get_link %}
+            <a href="{{ corrected_link }}" class="card-link">
+                ссылка на работу
+            </a>
+            {% endwith %}
         </div>
     </div>
     
 {% endfor %}
-
 </div>
+
+<script>
+    // This script runs after the page loads and formats the salary numbers.
+    document.addEventListener('DOMContentLoaded', (event) => {
+        // 1. Select all the salary elements that need formatting
+        const moneyElements = document.querySelectorAll('.js-money-value');
+
+        // 2. Define the formatting function
+        // This function adds thousand separators (like 100 000) based on the browser's locale (Russian/Kyrgyz locale uses spaces)
+        const formatter = new Intl.NumberFormat('ru-RU');
+
+        // 3. Iterate over the elements and format the content
+        moneyElements.forEach(element => {
+            const rawValue = element.textContent.trim();
+            const numericValue = parseInt(rawValue, 10);
+
+            if (!isNaN(numericValue) && numericValue > 0) {
+                // Apply the formatting and update the text
+                element.textContent = formatter.format(numericValue);
+            } else if (numericValue === -1) {
+                // Handle the case where money is -1 (Negotiable/Not specified)
+                element.textContent = 'По договорённости';
+                // Optional: Remove the trailing ' 000 рублей' if it's "По договорённости"
+                const parentP = element.closest('p');
+                if (parentP) {
+                    parentP.textContent = parentP.textContent.replace(' 000 рублей', '');
+                }
+            } else {
+                // Remove the element if the value is 0 or unreadable
+                element.textContent = 'Не указана';
+                const parentP = element.closest('p');
+                if (parentP) {
+                    parentP.textContent = parentP.textContent.replace(' 000 рублей', '');
+                }
+            }
+        });
+    });
+</script>
 
 <div class="footer">
     <p>
-        Сайт сделан Нарнынбаевым Нурсултаном.
+        Сайт сделан Нарынбаевым Нурсултаном.
     </p>
     <p>
         Вакансии взяты: russia.superjob.ru

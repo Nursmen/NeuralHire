@@ -33,22 +33,25 @@ for url in urls:
     for job in soup.find_all('div', {'class': 'f-test-search-result-item'}):
         try:
             title = job.find('a').text
+            print(title)
         except:
             continue
 
+        # money = re.findall(r'\d+', job.find('span', {'class':'_2eYAG _3xCPT rygxv _17lam _3GtUQ'}).text)
+        
         try:
-            money = re.findall(r'\d+', job.find('span', {'class':'_2eYAG _3xCPT rygxv _17lam _3GtUQ'}).text)
+            money = job.find('div', {'class':'f-test-text-company-item-salary'}).text
+            print('money:', money)
         except:
             continue
-            
-        city = job.find('span', {'class':'f-test-text-company-item-location _11xeD rygxv _17lam _1y0re'}).find('div', {'class':'V4aa2'}).text
+
+        city = job.find('span', {'class':'_94I1l f-test-text-vacancy-item-company-name _2xwe3 _3ixqx _3uDFj _2KByL _2wD_q'}).find('div', {'class':'V4aa2'}).text
         knoladge_temp = job.find_all('span')
 
         for i in knoladge_temp:
             if len(i.text) > 100:
-                knoladge = i.text
-        
-        knoladge = "".join(re.split("[^a-zA-Z\s]*", knoladge))
+                knoladge = i.text        
+        knoladge = "".join(re.split(r"[^a-zA-Z\s]*", knoladge))
         knoladge = " ".join(knoladge.split()).upper() 
 
         company = job.find('div', {'class':'_1d4Tz _2hVr3 _3aFAO _2hnju'})
