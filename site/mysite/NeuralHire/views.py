@@ -61,7 +61,7 @@
 # views.py
 from django.shortcuts import render
 from NeuralHire.models import Job
-from utils.embeddings import embed_text 
+from utils.embeddings import embed_query
 import numpy as np
 
 list_of_additions = [
@@ -73,12 +73,13 @@ list_of_additions = [
     'Доступно студентам',
 ]
 
+
 def main(request):
     if request.method != "POST":
         return render(request, 'neuralhire/index.html', {'additions': list_of_additions})
 
     user_query = request.POST.get('knoladge', '').strip()
-    
+
     selected_additions = [add for add in list_of_additions if request.POST.get(add)]
 
     if not user_query:
@@ -87,8 +88,9 @@ def main(request):
             'additions': list_of_additions
         })
 
-    query_embedding = embed_text(user_query)
-    
+    # Use specialized query embedding with preprocessing and context
+    query_embedding = embed_query(user_query)
+
     if query_embedding is None:
         return render(request, 'neuralhire/results.html', {'error': 'Не удалось обработать запрос'})
 
