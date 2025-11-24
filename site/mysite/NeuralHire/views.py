@@ -204,21 +204,26 @@ def main(request):
     jobs_queryset = Job.objects.filter(id__in=top_ids)
     jobs_dict = {job.id: job for job in jobs_queryset}
 
-    final_jobs = []
-    scores_list = []
-
+    # Build results paired with scores
+    results_with_scores = []
     for i, candidate in enumerate(final_candidates):
         job_obj = jobs_dict.get(candidate['id'])
         if job_obj:
-            final_jobs.append(job_obj)
             score = final_scores[i] if i < len(final_scores) else 0.0
-            scores_list.append(round(float(score), 4))
+            results_with_scores.append((job_obj, round(float(score), 4)))
+
+    # Sort by score (relevance) descending - highest relevance first
+    results_with_scores.sort(key=lambda x: x[1], reverse=True)
+
+    # Unpack for template
+    final_jobs = [r[0] for r in results_with_scores]
+    scores_list = [r[1] for r in results_with_scores]
 
     return render(request, 'neuralhire/results.html', {
         'user_query': user_query,
         'jobs': final_jobs,
         'scores': scores_list,
-        'zipped_results': zip(final_jobs, scores_list),
+        'zipped_results': list(zip(final_jobs, scores_list)),  # Convert to list for reuse in template
         'selected_additions': selected_additions,
         'additions': list_of_additions,
         'comma_delimiter': ',',
