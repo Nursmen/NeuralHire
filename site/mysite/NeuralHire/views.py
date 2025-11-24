@@ -85,7 +85,8 @@ FINAL_RESULTS = 20
 # Weight for keyword boost (0.0-1.0) - increased for better exact matching
 KEYWORD_BOOST_WEIGHT = 0.5
 # Enable LLM validation (requires Ollama running locally)
-USE_LLM_VALIDATION = True
+# Set to True if you have Ollama installed with qwen2.5:1.5b model
+USE_LLM_VALIDATION = False
 
 
 def main(request):
