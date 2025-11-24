@@ -1,6 +1,8 @@
 # utils/embeddings.py
 from sentence_transformers import SentenceTransformer, CrossEncoder
 import re
+import requests
+import json
 
 # Use multilingual-e5-small - designed for asymmetric search (query vs passage)
 # Properly handles different text types with instruction prefixes
@@ -8,16 +10,20 @@ import re
 _model = SentenceTransformer('intfloat/multilingual-e5-small')
 
 # Cross-encoder for reranking - FREE, runs locally, much more accurate
-# This model scores query-document pairs directly (not via embeddings)
+# Using multilingual mMARCO model - specifically trained for multilingual retrieval
 _reranker = None  # Lazy load to avoid startup cost
+
+# Ollama settings for LLM validation
+OLLAMA_URL = "http://localhost:11434/api/generate"
+OLLAMA_MODEL = "qwen2.5:1.5b"  # Small, fast, good for Russian. Alternatives: llama3.2:1b, phi3
 
 
 def get_reranker():
     """Lazy load cross-encoder reranker."""
     global _reranker
     if _reranker is None:
-        # Multilingual cross-encoder, great for Russian
-        _reranker = CrossEncoder('cross-encoder/ms-marco-MiniLM-L-6-v2')
+        # Multilingual cross-encoder trained on mMARCO - much better for Russian
+        _reranker = CrossEncoder('cross-encoder/mmarco-mMiniLMv2-L12-H384-v1')
     return _reranker
 
 
@@ -63,6 +69,21 @@ def create_job_text(title: str, knowledge: str, city: str = "",
         if additions_clean.strip():
             parts.append(additions_clean)
 
+    return " ".join(parts)
+
+
+def create_job_summary(title: str, knowledge: str, city: str = "", company: str = "") -> str:
+    """Create a short summary for LLM validation."""
+    parts = []
+    if title:
+        parts.append(title)
+    if knowledge:
+        # Take first 100 chars of knowledge
+        parts.append(knowledge[:100])
+    if company and company.lower() not in ('unknown', 'nan', 'none'):
+        parts.append(f"({company})")
+    if city and city.lower() not in ('unknown', 'nan', 'none'):
+        parts.append(f"- {city}")
     return " ".join(parts)
 
 
@@ -127,6 +148,74 @@ def rerank_results(query: str, job_texts: list, top_k: int = 20) -> list:
     indexed_scores.sort(key=lambda x: x[1], reverse=True)
 
     return indexed_scores[:top_k]
+
+
+def llm_validate_results(query: str, job_summaries: list, top_k: int = 10) -> list:
+    """
+    Use local LLM (Ollama) to validate and rerank search results.
+    FREE - runs completely locally via Ollama.
+
+    Returns list of indices sorted by LLM's relevance ranking.
+    Falls back gracefully if Ollama is not available.
+    """
+    if not job_summaries or len(job_summaries) == 0:
+        return list(range(len(job_summaries)))
+
+    # Build prompt for LLM
+    jobs_text = "\n".join([f"{i+1}. {summary}" for i, summary in enumerate(job_summaries[:20])])
+
+    prompt = f"""Ты помощник по поиску работы. Пользователь ищет: "{query}"
+
+Вот список вакансий:
+{jobs_text}
+
+Выбери {min(top_k, len(job_summaries))} наиболее релевантных вакансий для запроса "{query}".
+Ответь ТОЛЬКО номерами вакансий через запятую, от наиболее релевантной к менее релевантной.
+Например: 3,1,5,2,4
+
+Твой ответ (только номера):"""
+
+    try:
+        response = requests.post(
+            OLLAMA_URL,
+            json={
+                "model": OLLAMA_MODEL,
+                "prompt": prompt,
+                "stream": False,
+                "options": {
+                    "temperature": 0.1,
+                    "num_predict": 100
+                }
+            },
+            timeout=30
+        )
+
+        if response.status_code == 200:
+            result = response.json().get('response', '').strip()
+            # Parse the numbers from response
+            numbers = re.findall(r'\d+', result)
+            indices = []
+            seen = set()
+            for num in numbers:
+                idx = int(num) - 1  # Convert to 0-based index
+                if 0 <= idx < len(job_summaries) and idx not in seen:
+                    indices.append(idx)
+                    seen.add(idx)
+                if len(indices) >= top_k:
+                    break
+
+            # Add remaining indices that weren't mentioned
+            for i in range(len(job_summaries)):
+                if i not in seen and len(indices) < len(job_summaries):
+                    indices.append(i)
+
+            return indices[:top_k]
+    except (requests.RequestException, json.JSONDecodeError, ValueError):
+        # Ollama not available or error - fall back to original order
+        pass
+
+    # Fallback: return original order
+    return list(range(min(top_k, len(job_summaries))))
 
 
 def compute_keyword_boost(query: str, job_text: str) -> float:
