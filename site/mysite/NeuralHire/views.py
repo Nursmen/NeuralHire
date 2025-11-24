@@ -61,7 +61,10 @@
 # views.py
 from django.shortcuts import render
 from NeuralHire.models import Job
-from utils.embeddings import embed_query, rerank_results, compute_keyword_boost, create_job_text
+from utils.embeddings import (
+    embed_query, rerank_results, compute_keyword_boost,
+    create_job_text, create_job_summary, llm_validate_results
+)
 import numpy as np
 
 list_of_additions = [
@@ -74,11 +77,16 @@ list_of_additions = [
 ]
 
 # How many candidates to retrieve before reranking
-CANDIDATES_FOR_RERANK = 50
+CANDIDATES_FOR_RERANK = 100
+# Candidates for cross-encoder reranking
+CANDIDATES_FOR_CROSS_ENCODER = 30
 # Final number of results to show
 FINAL_RESULTS = 20
-# Weight for keyword boost (0.0-1.0)
-KEYWORD_BOOST_WEIGHT = 0.3
+# Weight for keyword boost (0.0-1.0) - increased for better exact matching
+KEYWORD_BOOST_WEIGHT = 0.5
+# Enable LLM validation (requires Ollama running locally)
+# Set to True if you have Ollama installed with qwen2.5:1.5b model
+USE_LLM_VALIDATION = False
 
 
 def main(request):
@@ -145,13 +153,17 @@ def main(request):
             'index': index,
             'id': job_item['id'],
             'score': final_score,
-            'job_text': job_text
+            'job_text': job_text,
+            'title': job_item['title'],
+            'knoladge': job_item['knoladge'],
+            'city': job_item.get('city', ''),
+            'company': job_item.get('company', '')
         })
 
     # Sort by combined score
     combined_scores.sort(key=lambda x: x['score'], reverse=True)
 
-    # Take top candidates for reranking
+    # Take top candidates for cross-encoder reranking
     candidates = combined_scores[:CANDIDATES_FOR_RERANK]
 
     if not candidates:
@@ -162,10 +174,32 @@ def main(request):
 
     # Stage 3: Rerank using cross-encoder (FREE, local model)
     candidate_texts = [c['job_text'] for c in candidates]
-    reranked = rerank_results(user_query, candidate_texts, top_k=FINAL_RESULTS)
+    reranked = rerank_results(user_query, candidate_texts, top_k=CANDIDATES_FOR_CROSS_ENCODER)
+
+    # Reorder candidates by cross-encoder scores
+    reranked_candidates = [candidates[idx] for idx, _ in reranked]
+    reranked_scores = [score for _, score in reranked]
+
+    # Stage 4: LLM validation (optional, requires Ollama)
+    if USE_LLM_VALIDATION and len(reranked_candidates) > 0:
+        # Create summaries for LLM
+        job_summaries = [
+            create_job_summary(c['title'], c['knoladge'], c['city'], c['company'])
+            for c in reranked_candidates
+        ]
+
+        # Get LLM's ranking
+        llm_order = llm_validate_results(user_query, job_summaries, top_k=FINAL_RESULTS)
+
+        # Reorder by LLM's preference
+        final_candidates = [reranked_candidates[i] for i in llm_order if i < len(reranked_candidates)]
+        final_scores = [reranked_scores[i] for i in llm_order if i < len(reranked_scores)]
+    else:
+        final_candidates = reranked_candidates[:FINAL_RESULTS]
+        final_scores = reranked_scores[:FINAL_RESULTS]
 
     # Build final results
-    top_ids = [candidates[idx]['id'] for idx, _ in reranked]
+    top_ids = [c['id'] for c in final_candidates]
 
     jobs_queryset = Job.objects.filter(id__in=top_ids)
     jobs_dict = {job.id: job for job in jobs_queryset}
@@ -173,12 +207,12 @@ def main(request):
     final_jobs = []
     scores_list = []
 
-    for idx, rerank_score in reranked:
-        job_id = candidates[idx]['id']
-        job_obj = jobs_dict.get(job_id)
+    for i, candidate in enumerate(final_candidates):
+        job_obj = jobs_dict.get(candidate['id'])
         if job_obj:
             final_jobs.append(job_obj)
-            scores_list.append(round(float(rerank_score), 4))
+            score = final_scores[i] if i < len(final_scores) else 0.0
+            scores_list.append(round(float(score), 4))
 
     return render(request, 'neuralhire/results.html', {
         'user_query': user_query,
