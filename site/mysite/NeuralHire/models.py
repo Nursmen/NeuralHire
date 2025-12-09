@@ -29,3 +29,29 @@ class Job(models.Model):
             models.Index(fields=['city']),
             models.Index(fields=['money']),
         ]
+
+
+class Resume(models.Model):
+    """Model for storing uploaded resume PDFs and their AI-extracted information."""
+    pdf_file = models.FileField(upload_to='resumes/')
+    uploaded_at = models.DateTimeField(auto_now_add=True)
+    
+    # Extracted information from Qwen VL
+    skills = models.TextField(blank=True)
+    experience = models.TextField(blank=True)
+    preferences = models.TextField(blank=True)
+    full_summary = models.TextField(blank=True)
+    
+    # For vector search
+    summary_embedding = ArrayField(
+        models.FloatField(),
+        size=384,
+        null=True,
+        blank=True,
+    )
+    
+    def __str__(self):
+        return f"Resume uploaded at {self.uploaded_at}"
+    
+    class Meta:
+        ordering = ['-uploaded_at']

@@ -1,77 +1,171 @@
 {% extends 'neuralhire/base.html' %}
 
 {% block content %}
-    <form method="POST">
-        {% csrf_token %}
-        <div class="inputs">
-            <p class="inputs-text"> Skills </p>
-            <input type="text" name="knoladge" class="inputs-input border-bottom border-dark-subtle border-3" value="Python SQL JavaScript">
-        </div>
-        
-        <div class="inputs">
-            <p class="inputs-text">Additions</p>
-            <div class="list">
-                {% for addition in additions %}
-                <div class="list-data">
-                <input type="checkbox" name="{{addition}}" value="{{addition}}" id="{{addition}}" class="border-2 border-dark-subtle form-check-input checkbox">
-                <label for="{{addition}}">{{addition}}</label>
-                </div>
-                {% endfor %}
+<style>
+    .search-container {
+        display: flex;
+        gap: 40px;
+        margin: 30px 50px;
+        align-items: flex-start;
+    }
+
+    .search-method {
+        flex: 1;
+        padding: 30px;
+        background-color: #f8f9fa;
+        border-radius: 10px;
+        box-shadow: 0 2px 8px rgba(0, 0, 0, 0.1);
+    }
+
+    .method-title {
+        font-family: Roboto Mono;
+        font-size: x-large;
+        font-weight: bold;
+        color: #000;
+        margin-bottom: 25px;
+        text-align: center;
+        padding-bottom: 15px;
+        border-bottom: 3px solid #000;
+    }
+
+    .checkbox {
+        height: 20px;
+        width: 20px;
+        margin-bottom: 8px;
+        accent-color: #000;
+    }
+
+    .submit {
+        background-color: white;
+        width: 100%;
+        height: 50px;
+        border: 2px solid #000;
+        border-radius: 0;
+        font-size: 18px;
+        cursor: pointer;
+        transition: all 0.3s ease;
+    }
+
+    .submit:hover {
+        animation: submitPulse 1s ease-in-out infinite;
+    }
+
+    @keyframes submitPulse {
+
+        0%,
+        100% {
+            box-shadow: 0 0 0 0 rgba(0, 0, 0, 0.3);
+        }
+
+        50% {
+            box-shadow: 0 0 0 10px rgba(0, 0, 0, 0);
+        }
+    }
+
+    .list-data {
+        margin-bottom: 10px;
+        font-size: 16px;
+    }
+
+    .inputs {
+        margin-bottom: 25px;
+    }
+
+    .inputs-text {
+        font-family: Roboto Mono;
+        font-size: large;
+        font-weight: bold;
+        margin-bottom: 15px;
+        color: #333;
+    }
+
+    input[type="text"],
+    input[type="file"] {
+        padding: 10px;
+        border: 2px solid #ddd;
+        border-radius: 5px;
+        width: 100%;
+        font-size: 16px;
+        transition: border-color 0.3s;
+    }
+
+    input[type="text"]:focus,
+    input[type="file"]:focus {
+        outline: none;
+        border-color: #000;
+    }
+
+    .file-info {
+        font-size: 14px;
+        color: #666;
+        margin-top: 10px;
+        line-height: 1.5;
+    }
+
+    @media (max-width: 768px) {
+        .search-container {
+            flex-direction: column;
+        }
+    }
+</style>
+
+<div class="search-container">
+    <!-- Text Search Method -->
+    <div class="search-method">
+        <div class="method-title">Поиск по навыкам</div>
+        <form method="POST">
+            {% csrf_token %}
+            <div class="inputs">
+                <p class="inputs-text">Навыки</p>
+                <input type="text" name="knoladge" placeholder="Python SQL JavaScript" value="Python SQL JavaScript">
             </div>
-        </div>
-    
-        <center>
-            <button type="submit" class="submit border border-2 border-dark">Prediction</button>
-        </center>
-    
-    </form>
-    <style>
-        .checkbox {
-            height: 20px;
-            width: 20px;
-            margin-bottom: 8px;
-        }
-        .submit {
-            background-color: white;
-            width: 225px;
-            height: 50px;
-            animation: submit 2s infinite;
-        }
-        @keyframes submit {
-            0% {
-                box-shadow: none;
-            }
-            100% {
-                outline: 10px solid rgba(255, 255, 255, 0.3);
-            }
-        }
-        .list-data {
-            margin-bottom: 10px;
-            font-size: 18px;
-        }
-        .inputs {
-            margin-left: 50px;
-            margin-bottom: 50px;
-        }
-        .inputs-text {
-            font-family: Roboto Mono;
-            font-size: x-large;
-            font-weight: bold;
-            margin-bottom: 20px;
-        }
-        input {
-            padding-left: 10px;
-            border: none;
-        }
-        .inputs-input {
-            width: 500px;
-            font-size: 18px;
-        }
-        input:focus,
-        select:focus,
-        textarea:focus,
-        button:focus {
-            outline: none;
-        }
-    </style>
+
+            <div class="inputs">
+                <p class="inputs-text">Дополнительно</p>
+                <div class="list">
+                    {% for addition in additions %}
+                    <div class="list-data">
+                        <input type="checkbox" name="{{addition}}" value="{{addition}}" id="text_{{addition}}"
+                            class="checkbox">
+                        <label for="text_{{addition}}">{{addition}}</label>
+                    </div>
+                    {% endfor %}
+                </div>
+            </div>
+
+            <button type="submit" class="submit">Prediction</button>
+        </form>
+    </div>
+
+    <!-- PDF Upload Method -->
+    <div class="search-method">
+        <div class="method-title">Загрузка резюме</div>
+        <form method="POST" action="{% url 'upload_resume' %}" enctype="multipart/form-data">
+            {% csrf_token %}
+            <div class="inputs">
+                <p class="inputs-text">Резюме (PDF)</p>
+                <input type="file" name="resume_pdf" accept=".pdf" required>
+                <p class="file-info">
+                    Загрузите ваше резюме в формате PDF.<br>
+                    AI проанализирует его и найдёт подходящие вакансии.
+                </p>
+            </div>
+
+            <div class="inputs">
+                <p class="inputs-text">Дополнительно</p>
+                <div class="list">
+                    {% for addition in additions %}
+                    <div class="list-data">
+                        <input type="checkbox" name="{{addition}}" value="{{addition}}" id="pdf_{{addition}}"
+                            class="checkbox">
+                        <label for="pdf_{{addition}}">{{addition}}</label>
+                    </div>
+                    {% endfor %}
+                </div>
+            </div>
+
+            <button type="submit" class="submit">Prediction</button>
+        </form>
+    </div>
+</div>
 {% endblock %}

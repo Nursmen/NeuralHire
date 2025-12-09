@@ -1,70 +1,12 @@
-# from django.shortcuts import render, redirect
-# from .models import Job
-# import pandas as pd
-# import joblib
-# import numpy as np
-
-# list_of_additions = ['Отклик без резюме', 'Опыт не нужен',
-#                     'Доступно для соискателей от 45+ лет',
-#                     'Удаленная работа', 'Доступно для соискателей с ограниченными возможностями', 'Доступно студентам']
-
-# # Create your views here.
-# def main(request):
-#     if request.method == "POST":
-#         addition = '[\''
-#         for i in list_of_additions:
-#             try:
-#                 addition+=request.POST[i]
-#                 addition+='\', \''
-#             except:
-#                 pass
-
-#         addition = addition[:-3]
-#         addition += ']'
-        
-#         df_col = pd.read_csv('./site/mysite/NeuralHire/model/columns.csv')
-#         df_col = df_col.drop(['Unnamed: 0', 'money'], axis=1)
-
-#         for i in request.POST['knoladge'].upper().split(' '):
-#             if i in df_col.columns:
-#                 df_col[i] = 1
-        
-#         if addition != '':
-#             addition = 'addition_'+addition
-
-#         if addition in df_col.columns:
-#             df_col[addition] = 1
-
-#         # here we go
-#         # ok i got a plan
-#         # i will make a little csv with only columns
-#         # then just change some data
-
-#         model = joblib.load('./site/mysite/NeuralHire/model/model.sav')
-#         prediciton = np.round(model.predict(df_col), 2)
-
-#         # now we need to find jobs
-
-#         std = 10
-
-#         # instead of > and < u need to use gte (greater or equal) and lte (lower or equal)
-#         results = Job.objects.filter(money__lte = (int(prediciton[0])+std), money__gte = (int(prediciton[0])-std))[:3]
-#         for i in results:
-#             print(i.link)
-
-#         return render(request, 'neuralhire/results.html', {'prediction':int(prediciton[0] * 1000), 
-#                                                             'jobs': results})
-
-#     return render(request, 'neuralhire/index.html', {'additions':list_of_additions})
-
-
 # views.py
 from django.shortcuts import render
-from NeuralHire.models import Job
+from django.core.files.storage import default_storage
+from NeuralHire.models import Job, Resume
 from utils.embeddings import (
     embed_query, rerank_results, compute_keyword_boost,
     create_job_text, create_job_summary, llm_validate_results
 )
+from utils.qwen_vl import summarize_resume, explain_job_match
 import numpy as np
 
 list_of_additions = [
@@ -76,16 +18,11 @@ list_of_additions = [
     'Доступно студентам',
 ]
 
-# How many candidates to retrieve before reranking
+# Configuration
 CANDIDATES_FOR_RERANK = 100
-# Candidates for cross-encoder reranking
 CANDIDATES_FOR_CROSS_ENCODER = 30
-# Final number of results to show
 FINAL_RESULTS = 20
-# Weight for keyword boost (0.0-1.0) - increased for better exact matching
 KEYWORD_BOOST_WEIGHT = 0.5
-# Enable LLM validation (requires Ollama running locally)
-# Set to True if you have Ollama installed with qwen2.5:1.5b model
 USE_LLM_VALIDATION = False
 
 
@@ -94,7 +31,6 @@ def main(request):
         return render(request, 'neuralhire/index.html', {'additions': list_of_additions})
 
     user_query = request.POST.get('knoladge', '').strip()
-
     selected_additions = [add for add in list_of_additions if request.POST.get(add)]
 
     if not user_query:
@@ -103,15 +39,11 @@ def main(request):
             'additions': list_of_additions
         })
 
-    # Use specialized query embedding
     query_embedding = embed_query(user_query)
-
     if query_embedding is None:
         return render(request, 'neuralhire/results.html', {'error': 'Не удалось обработать запрос'})
 
     query_vec = np.array(query_embedding)
-
-    # Get all jobs with embeddings, including title and knoladge for reranking
     jobs_data = list(Job.objects.filter(content_embedding__isnull=False)
                      .values('id', 'content_embedding', 'addition', 'title', 'knoladge', 'city', 'company'))
 
@@ -119,51 +51,34 @@ def main(request):
         return render(request, 'neuralhire/results.html', {'error': 'Нет вакансий с эмбеддингами'})
 
     job_matrix = np.array([j['content_embedding'] for j in jobs_data])
-
-    # Stage 1: Fast vector similarity search
     embedding_scores = np.dot(job_matrix, query_vec)
 
-    # Stage 2: Add keyword boost to embedding scores
     combined_scores = []
     for index, emb_score in enumerate(embedding_scores):
         job_item = jobs_data[index]
 
-        # Filter by selected additions first
         if selected_additions:
             job_additions = job_item['addition'] if job_item['addition'] else ""
             if not any(sel_add in job_additions for sel_add in selected_additions):
                 continue
 
-        # Create job text for keyword matching
         job_text = create_job_text(
-            job_item['title'],
-            job_item['knoladge'],
-            job_item.get('city', ''),
-            job_item.get('company', ''),
+            job_item['title'], job_item['knoladge'],
+            job_item.get('city', ''), job_item.get('company', ''),
             job_item.get('addition', '')
         )
 
-        # Compute keyword boost
         keyword_boost = compute_keyword_boost(user_query, job_text)
-
-        # Combine scores: embedding + keyword boost
         final_score = emb_score + (keyword_boost * KEYWORD_BOOST_WEIGHT)
 
         combined_scores.append({
-            'index': index,
-            'id': job_item['id'],
-            'score': final_score,
-            'job_text': job_text,
-            'title': job_item['title'],
+            'index': index, 'id': job_item['id'], 'score': final_score,
+            'job_text': job_text, 'title': job_item['title'],
             'knoladge': job_item['knoladge'],
-            'city': job_item.get('city', ''),
-            'company': job_item.get('company', '')
+            'city': job_item.get('city', ''), 'company': job_item.get('company', '')
         })
 
-    # Sort by combined score
     combined_scores.sort(key=lambda x: x['score'], reverse=True)
-
-    # Take top candidates for cross-encoder reranking
     candidates = combined_scores[:CANDIDATES_FOR_RERANK]
 
     if not candidates:
@@ -172,35 +87,23 @@ def main(request):
             'additions': list_of_additions
         })
 
-    # Stage 3: Rerank using cross-encoder (FREE, local model)
     candidate_texts = [c['job_text'] for c in candidates]
     reranked = rerank_results(user_query, candidate_texts, top_k=CANDIDATES_FOR_CROSS_ENCODER)
 
-    # Reorder candidates by cross-encoder scores
     reranked_candidates = [candidates[idx] for idx, _ in reranked]
     reranked_scores = [score for _, score in reranked]
 
-    # Stage 4: LLM validation (optional, requires Ollama)
     if USE_LLM_VALIDATION and len(reranked_candidates) > 0:
-        # Create summaries for LLM
-        job_summaries = [
-            create_job_summary(c['title'], c['knoladge'], c['city'], c['company'])
-            for c in reranked_candidates
-        ]
-
-        # Get LLM's ranking
+        job_summaries = [create_job_summary(c['title'], c['knoladge'], c['city'], c['company'])
+                         for c in reranked_candidates]
         llm_order = llm_validate_results(user_query, job_summaries, top_k=FINAL_RESULTS)
-
-        # Reorder by LLM's preference
         final_candidates = [reranked_candidates[i] for i in llm_order if i < len(reranked_candidates)]
         final_scores = [reranked_scores[i] for i in llm_order if i < len(reranked_scores)]
     else:
         final_candidates = reranked_candidates[:FINAL_RESULTS]
         final_scores = reranked_scores[:FINAL_RESULTS]
 
-    # Build final results
     top_ids = [c['id'] for c in final_candidates]
-
     jobs_queryset = Job.objects.filter(id__in=top_ids)
     jobs_dict = {job.id: job for job in jobs_queryset}
 
@@ -223,3 +126,140 @@ def main(request):
         'additions': list_of_additions,
         'comma_delimiter': ',',
     })
+
+
+def upload_resume(request):
+    """Handle PDF resume upload and job matching."""
+    if request.method != "POST":
+        return render(request, 'neuralhire/index.html', {'additions': list_of_additions})
+    
+    if 'resume_pdf' not in request.FILES:
+        return render(request, 'neuralhire/results.html', {
+            'error': 'Пожалуйста, загрузите PDF файл резюме',
+            'additions': list_of_additions
+        })
+    
+    pdf_file = request.FILES['resume_pdf']
+    
+    if not pdf_file.name.endswith('.pdf'):
+        return render(request, 'neuralhire/results.html', {
+            'error': 'Пожалуйста, загрузите файл в формате PDF',
+            'additions': list_of_additions
+        })
+    
+    try:
+        file_path = default_storage.save(f'temp/{pdf_file.name}', pdf_file)
+        full_path = default_storage.path(file_path)
+        
+        resume_data = summarize_resume(full_path)
+        default_storage.delete(file_path)
+        
+        if not resume_data:
+            return render(request, 'neuralhire/results.html', {
+                'error': 'Не удалось обработать резюме. Проверьте формат PDF и попробуйте снова.',
+                'additions': list_of_additions
+            })
+        
+        skills = resume_data.get('skills', '')
+        experience = resume_data.get('experience', '')
+        preferences = resume_data.get('preferences', '')
+        full_summary = resume_data.get('full_summary', '')
+        
+        summary_embedding = embed_query(full_summary)
+        
+        if summary_embedding is None:
+            return render(request, 'neuralhire/results.html', {
+                'error': 'Не удалось создать эмбеддинг для резюме',
+                'additions': list_of_additions
+            })
+        
+        resume_obj = Resume.objects.create(
+            pdf_file=pdf_file,
+            skills=skills,
+            experience=experience,
+            preferences=preferences,
+            full_summary=full_summary,
+            summary_embedding=summary_embedding
+        )
+        
+        query_vec = np.array(summary_embedding)
+        jobs_data = list(Job.objects.filter(content_embedding__isnull=False)
+                         .values('id', 'content_embedding', 'title', 'knoladge', 'city', 'company', 'addition'))
+        
+        if not jobs_data:
+            return render(request, 'neuralhire/results.html', {
+                'error': 'Нет вакансий с эмбеддингами',
+                'additions': list_of_additions
+            })
+        
+        job_matrix = np.array([j['content_embedding'] for j in jobs_data])
+        embedding_scores = np.dot(job_matrix, query_vec)
+        
+        scored_jobs = []
+        for index, score in enumerate(embedding_scores):
+            job_item = jobs_data[index]
+            scored_jobs.append({
+                'id': job_item['id'],
+                'score': float(score),
+                'title': job_item['title'],
+                'knoladge': job_item['knoladge'],
+                'city': job_item.get('city', ''),
+                'company': job_item.get('company', ''),
+                'addition': job_item.get('addition', '')
+            })
+        
+        scored_jobs.sort(key=lambda x: x['score'], reverse=True)
+        
+        # Filter by selected additions
+        selected_additions = [add for add in list_of_additions if request.POST.get(add)]
+        if selected_additions:
+            filtered_jobs = []
+            for job in scored_jobs:
+                job_additions = job.get('addition', '')
+                if job_additions and any(sel_add in job_additions for sel_add in selected_additions):
+                    filtered_jobs.append(job)
+            scored_jobs = filtered_jobs
+        
+        top_candidates = scored_jobs[:FINAL_RESULTS]
+        top_ids = [c['id'] for c in top_candidates]
+        
+        jobs_queryset = Job.objects.filter(id__in=top_ids)
+        jobs_dict = {job.id: job for job in jobs_queryset}
+        
+        final_jobs = []
+        scores_list = []
+        
+        for candidate in top_candidates:
+            job_obj = jobs_dict.get(candidate['id'])
+            if job_obj:
+                final_jobs.append(job_obj)
+                scores_list.append(round(candidate['score'], 4))
+        
+        # Generate individual AI explanations for top 3 jobs
+        job_explanations = []
+        if final_jobs:
+            for i, job in enumerate(final_jobs[:3]):
+                explanation = explain_job_match(full_summary, job)
+                job_explanations.append(explanation)
+        
+        return render(request, 'neuralhire/results.html', {
+            'jobs': final_jobs,
+            'scores': scores_list,
+            'zipped_results': zip(final_jobs, scores_list),
+            'resume_summary': {
+                'skills': skills,
+                'experience': experience,
+                'preferences': preferences,
+                'full_summary': full_summary
+            },
+            'job_explanations': job_explanations,
+            'additions': list_of_additions,
+        })
+        
+    except Exception as e:
+        import traceback
+        traceback.print_exc()
+        return render(request, 'neuralhire/results.html', {
+            'error': f'Произошла ошибка при обработке резюме: {str(e)}',
+            'additions': list_of_additions
+        })
