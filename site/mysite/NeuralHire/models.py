@@ -1,7 +1,6 @@
 # models.py
 from django.db import models
-from django.contrib.postgres.fields import ArrayField  # Это встроено в Django, ничего устанавливать не нужно
-
+from django.contrib.postgres.fields import ArrayField
 
 class Job(models.Model):
     title = models.CharField(max_length=255)
@@ -25,7 +24,6 @@ class Job(models.Model):
 
     class Meta:
         indexes = [
-            # Ускоряет обычные запросы
             models.Index(fields=['city']),
             models.Index(fields=['money']),
         ]
@@ -49,6 +47,9 @@ class Resume(models.Model):
         null=True,
         blank=True,
     )
+    
+    # Store crop image paths: {job_id: {keyword: crop_path}}
+    crop_data = models.JSONField(null=True, blank=True)
     
     def __str__(self):
         return f"Resume uploaded at {self.uploaded_at}"

@@ -48,3 +48,14 @@ def clean_company(value):
         value = re.sub(r'\d+\.\d+\s*$', '', value)
         return value.strip()
     return value
+
+
+@register.filter
+def get_item(dictionary, key):
+    """
+    Get an item from a dictionary using a key.
+    Usage: {{ dictionary|get_item:key }}
+    """
+    if dictionary:
+        return dictionary.get(key)
+    return None

@@ -1,0 +1,48 @@
+# PATCH FOR views.py - Resume Crop Feature
+# Apply these changes manually to site/mysite/NeuralHire/views.py
+
+## 1. Update imports (around line 9-10)
+# CHANGE:
+from utils.qwen_vl import summarize_resume, explain_job_match
+import numpy as np
+
+# TO:
+from utils.qwen_vl import summarize_resume, explain_job_match, extract_keywords_from_explanation, extract_resume_crops
+import numpy as np
+import os
+
+
+## 2. In upload_resume function, after line 244 (after job_explanations.append(explanation))
+# ADD this code block:
+        
+        # Extract resume crops for top 3 jobs
+        job_crops = {}
+        if final_jobs and job_explanations:
+            for i, (job, explanation) in enumerate(zip(final_jobs[:3], job_explanations)):
+                keywords = extract_keywords_from_explanation(explanation)
+                if keywords:
+                    crops_dir = os.path.join(default_storage.location, 'crops')
+                    crops = extract_resume_crops(resume_obj.pdf_file.path, keywords, crops_dir)
+                    if crops and keywords[0] in crops:
+                        crop_abs_path = crops[keywords[0]]
+                        crop_rel_path = os.path.relpath(crop_abs_path, default_storage.location)
+                        job_crops[job.id] = crop_rel_path
+        
+        if job_crops:
+            resume_obj.crop_data = job_crops
+            resume_obj.save()
+
+
+## 3. In the return statement (around line 256), add job_crops to context
+# CHANGE:
+            'job_explanations': job_explanations,
+            'additions': list_of_additions,
+
+# TO:
+            'job_explanations': job_explanations,
+            'job_crops': job_crops,
+            'additions': list_of_additions,
+
+
+# That's it! Save the file and the backend will be ready.
+# Next step: Update results.html to display the crops with a button.

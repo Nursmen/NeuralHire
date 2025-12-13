@@ -6,8 +6,9 @@ from utils.embeddings import (
     embed_query, rerank_results, compute_keyword_boost,
     create_job_text, create_job_summary, llm_validate_results
 )
-from utils.qwen_vl import summarize_resume, explain_job_match
+from utils.qwen_vl import summarize_resume, explain_job_match, extract_keywords_from_explanation, extract_resume_crops
 import numpy as np
+import os
 
 list_of_additions = [
     'Отклик без резюме',
@@ -242,6 +243,23 @@ def upload_resume(request):
                 explanation = explain_job_match(full_summary, job)
                 job_explanations.append(explanation)
         
+        # Extract resume crops for top 3 jobs
+        job_crops = {}
+        if final_jobs and job_explanations:
+            for i, (job, explanation) in enumerate(zip(final_jobs[:3], job_explanations)):
+                keywords = extract_keywords_from_explanation(explanation)
+                if keywords:
+                    crops_dir = os.path.join(default_storage.location, 'crops')
+                    crops = extract_resume_crops(resume_obj.pdf_file.path, keywords, crops_dir)
+                    if crops and keywords[0] in crops:
+                        crop_abs_path = crops[keywords[0]]
+                        crop_rel_path = os.path.relpath(crop_abs_path, default_storage.location)
+                        job_crops[job.id] = crop_rel_path
+        
+        if job_crops:
+            resume_obj.crop_data = job_crops
+            resume_obj.save()
+        
         return render(request, 'neuralhire/results.html', {
             'jobs': final_jobs,
             'scores': scores_list,
@@ -253,6 +271,7 @@ def upload_resume(request):
                 'full_summary': full_summary
             },
             'job_explanations': job_explanations,
+            'job_crops': job_crops,
             'additions': list_of_additions,
         })
         

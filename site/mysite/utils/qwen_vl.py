@@ -176,3 +176,249 @@ def explain_job_match(resume_summary, job):
     except Exception as e:
         print(f"Exception in explain_job_match: {e}")
         return None
+
+
+def test_extract_bbox(pdf_path, keyword):
+    """
+    TEST FUNCTION: Extract bounding box coordinates for a keyword in the resume.
+    Uses Qwen VL to locate text and return coordinates.
+    
+    Args:
+        pdf_path: Path to PDF resume
+        keyword: Text to locate (e.g., "Python", "опыт работы")
+    
+    Returns:
+        dict with bbox coordinates: {"bbox": [x1, y1, x2, y2], "page": page_num}
+    """
+    try:
+        print(f"\n=== Testing bbox extraction for keyword: '{keyword}' ===")
+        
+        # Convert PDF to images
+        with tempfile.TemporaryDirectory() as temp_dir:
+            images = convert_from_path(pdf_path, output_folder=temp_dir, fmt='png', last_page=2)
+            if not images:
+                print("No images generated from PDF")
+                return None
+            
+            # Try each page
+            for page_num, image in enumerate(images, 1):
+                img_path = os.path.join(temp_dir, f'page_{page_num}.png')
+                image.save(img_path, 'PNG')
+                
+                # Encode to base64
+                base64_image = encode_image_to_base64(img_path)
+                print(f"Image size: {image.size}")
+                
+                # Construct grounding prompt
+                messages = [
+                    {
+                        "role": "user",
+                        "content": [
+                            {
+                                "type": "image_url",
+                                "image_url": {
+                                    "url": f"data:image/png;base64,{base64_image}"
+                                }
+                            },
+                            {
+                                "type": "text",
+                                "text": f"""Locate the word "{keyword}" in this document image.
+                                
+If you find it, respond with:
+{{"found": true, "bbox": [x1, y1, x2, y2]}}
+
+If not found, respond with:
+{{"found": false}}
+
+The bbox coordinates should be normalized to 0-1000 range relative to the image dimensions."""
+                            }
+                        ]
+                    }
+                ]
+                
+                print(f"Trying page {page_num}...")
+                
+                # Call Qwen VL
+                completion = client.chat.completions.create(
+                    model="qwen-vl-max",  # Using max for better grounding
+                    messages=messages
+                )
+                
+                result_text = completion.choices[0].message.content
+                print(f"Raw response: {result_text}")
+                
+                # Parse JSON
+                try:
+                    if '```json' in result_text:
+                        result_text = result_text.split('```json')[1].split('```')[0].strip()
+                    elif '```' in result_text:
+                        result_text = result_text.split('```')[1].split('```')[0].strip()
+                    
+                    parsed = json.loads(result_text)
+                    
+                    if parsed.get('found'):
+                        print(f"✓ Found on page {page_num}: {parsed}")
+                        return {
+                            "bbox": parsed.get('bbox'),
+                            "page": page_num,
+                            "text": parsed.get('text', keyword)
+                        }
+                except json.JSONDecodeError as je:
+                    print(f"JSON parse error: {je}")
+                    continue
+            
+            print("Keyword not found in any page")
+            return None
+    
+    except Exception as e:
+        print(f"Exception in test_extract_bbox: {e}")
+        import traceback
+        traceback.print_exc()
+        return None
+
+
+def extract_keywords_from_explanation(explanation):
+    """
+    Extract 1 key skill/keyword from a job explanation.
+    Uses Qwen to identify the most important term.
+    """
+    try:
+        prompt = f"""From this job match explanation, identify the specific HARD SKILL, TOOL, TECHNOLOGY, CERTIFICATION, or LOCATION (City) that serves as the strongest evidence for this match.
+
+Rules:
+1. **PRIORITY**: If a specific City or Location is mentioned as a key match factor, select it as the keyword.
+2. Do NOT select generic job titles (e.g., "Cook", "Manager", "Driver", "Engineer").
+3. Do NOT select soft skills (e.g., "Communication", "Leadership") unless no hard skills are present.
+4. Select a specific term that is likely to be found verbatim in the resume (e.g., "Moscow", "Python", "HACCP", "AutoCAD").
+5. Return ONLY a JSON array with one keyword string.
+
+Explanation: {explanation}"""
+
+        completion = client.chat.completions.create(
+            model="qwen-plus",
+            messages=[
+                {"role": "system", "content": "Extract ONE specific hard skill, tool, or location as evidence. Return only JSON array."},
+                {"role": "user", "content": prompt}
+            ]
+        )
+
+        result = completion.choices[0].message.content
+        
+        # Parse JSON
+        if '```json' in result:
+            result = result.split('```json')[1].split('```')[0].strip()
+        elif '```' in result:
+            result = result.split('```')[1].split('```')[0].strip()
+        
+        keywords = json.loads(result)
+        return keywords[:1]  # Only 1 keyword
+    
+    except Exception as e:
+        print(f"Error extracting keywords: {e}")
+        return []
+
+
+def extract_resume_crops(pdf_path, keywords_list, output_dir):
+    """
+    Extract and crop sections of resume for given keywords.
+    
+    Args:
+        pdf_path: Path to resume PDF
+        keywords_list: List of keywords to locate
+        output_dir: Directory to save cropped images
+    
+    Returns:
+        dict: {keyword: crop_image_path}
+    """
+    from PIL import Image
+    
+    crops = {}
+    
+    try:
+        # Convert PDF to images
+        with tempfile.TemporaryDirectory() as temp_dir:
+            images = convert_from_path(pdf_path, output_folder=temp_dir, fmt='png', last_page=2)
+            if not images:
+                return crops
+            
+            # Save full page images
+            page_images = []
+            for i, image in enumerate(images, 1):
+                img_path = os.path.join(temp_dir, f'page_{i}.png')
+                image.save(img_path, 'PNG')
+                page_images.append((i, img_path, image))
+            
+            # For each keyword, find and crop
+            for keyword in keywords_list:
+                print(f"Looking for: {keyword}")
+                
+                # Try each page
+                for page_num, img_path, pil_image in page_images:
+                    base64_image = encode_image_to_base64(img_path)
+                    
+                    messages = [{
+                        "role": "user",
+                        "content": [
+                            {
+                                "type": "image_url",
+                                "image_url": {"url": f"data:image/png;base64,{base64_image}"}
+                            },
+                            {
+                                "type": "text",
+                                "text": f"""Locate the word "{keyword}" in this document image.
+                                
+                                If you find it, respond with:
+                                {{"found": true, "bbox": [x1, y1, x2, y2]}}
+
+                                If not found, respond with:
+                                {{"found": false}} 
+                                """
+                            }
+                        ]
+                    }]
+                    
+                    completion = client.chat.completions.create(
+                        model="qwen-vl-max",
+                        messages=messages
+                    )
+                    
+                    result_text = completion.choices[0].message.content
+                    
+                    try:
+                        if '```json' in result_text:
+                            result_text = result_text.split('```json')[1].split('```')[0].strip()
+                        elif '```' in result_text:
+                            result_text = result_text.split('```')[1].split('```')[0].strip()
+                        
+                        parsed = json.loads(result_text)
+                        
+                        if parsed.get('found'):
+                            bbox = parsed['bbox']
+                            
+                            x1, y1, x2, y2 = map(int, bbox)
+                            if bbox[2] < bbox[0] or bbox[3] < bbox[1]:
+                                x, y, w, h = bbox
+                                x1, y1, x2, y2 = x, y, x + w, y + h
+                            
+                            # Crop image
+                            cropped = pil_image.crop((x1, y1, x2, y2))
+                            
+                            # Save crop
+                            os.makedirs(output_dir, exist_ok=True)
+                            crop_filename = f"crop_{keyword.replace(' ', '_')}_{page_num}.png"
+                            crop_path = os.path.join(output_dir, crop_filename)
+                            cropped.save(crop_path, 'PNG')
+                            
+                            crops[keyword] = crop_path
+                            print(f"✓ Cropped '{keyword}' -> {crop_filename}")
+                            break  # Found on this page, move to next keyword
+                    
+                    except json.JSONDecodeError:
+                        continue
+    
+    except Exception as e:
+        print(f"Error in extract_resume_crops: {e}")
+        import traceback
+        traceback.print_exc()
+    
+    return crops

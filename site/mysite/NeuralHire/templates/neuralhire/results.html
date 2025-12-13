@@ -66,6 +66,22 @@
                     <strong style="color: #000;">Почему эта вакансия подходит:</strong>
                 </div>
                 <p style="margin: 0; line-height: 1.6; color: #333;">{{ job_explanations|index:forloop.counter0 }}</p>
+
+                <!-- Resume Evidence Crop -->
+                {% with crop_path=job_crops|get_item:job.id %}
+                {% if crop_path %}
+                <div style="margin-top: 10px;">
+                    <button onclick="toggleCrop('crop-{{ job.id }}')"
+                        style="background: none; border: none; color: #666; cursor: pointer; text-decoration: underline; padding: 0; font-size: 14px; display: flex; align-items: center; gap: 5px;">
+                        <span>Показать подтверждение из резюме</span>
+                    </button>
+                    <div id="crop-{{ job.id }}" style="display: none; margin-top: 10px;">
+                        <img src="/media/{{ crop_path }}" alt="Resume evidence"
+                            style="max-width: 100%; border: 1px solid #ddd; border-radius: 4px; box-shadow: 0 2px 5px rgba(0,0,0,0.1);">
+                    </div>
+                </div>
+                {% endif %}
+                {% endwith %}
         </div>
         {% endif %}
 
@@ -138,6 +154,15 @@
             }
         });
     });
+
+    function toggleCrop(id) {
+        var x = document.getElementById(id);
+        if (x.style.display === "none") {
+            x.style.display = "block";
+        } else {
+            x.style.display = "none";
+        }
+    }
 </script>
 
 <div class="footer" style="margin: 30px 50px; padding: 20px 0; border-top: 2px solid #eee; color: #666;">
