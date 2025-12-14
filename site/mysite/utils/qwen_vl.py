@@ -317,108 +317,62 @@ Explanation: {explanation}"""
         print(f"Error extracting keywords: {e}")
         return []
 
+import pytesseract
+pytesseract.pytesseract.tesseract_cmd = r"C:\Program Files\Tesseract-OCR\tesseract.exe"
 
 def extract_resume_crops(pdf_path, keywords_list, output_dir):
-    """
-    Extract and crop sections of resume for given keywords.
-    
-    Args:
-        pdf_path: Path to resume PDF
-        keywords_list: List of keywords to locate
-        output_dir: Directory to save cropped images
-    
-    Returns:
-        dict: {keyword: crop_image_path}
-    """
+    import os
+    import pytesseract
+    from pdf2image import convert_from_path
     from PIL import Image
-    
-    crops = {}
-    
-    try:
-        # Convert PDF to images
-        with tempfile.TemporaryDirectory() as temp_dir:
-            images = convert_from_path(pdf_path, output_folder=temp_dir, fmt='png', last_page=2)
-            if not images:
-                return crops
-            
-            # Save full page images
-            page_images = []
-            for i, image in enumerate(images, 1):
-                img_path = os.path.join(temp_dir, f'page_{i}.png')
-                image.save(img_path, 'PNG')
-                page_images.append((i, img_path, image))
-            
-            # For each keyword, find and crop
-            for keyword in keywords_list:
-                print(f"Looking for: {keyword}")
-                
-                # Try each page
-                for page_num, img_path, pil_image in page_images:
-                    base64_image = encode_image_to_base64(img_path)
-                    
-                    messages = [{
-                        "role": "user",
-                        "content": [
-                            {
-                                "type": "image_url",
-                                "image_url": {"url": f"data:image/png;base64,{base64_image}"}
-                            },
-                            {
-                                "type": "text",
-                                "text": f"""Locate the word "{keyword}" in this document image.
-                                
-                                If you find it, respond with:
-                                {{"found": true, "bbox": [x1, y1, x2, y2]}}
 
-                                If not found, respond with:
-                                {{"found": false}} 
-                                """
-                            }
-                        ]
-                    }]
-                    
-                    completion = client.chat.completions.create(
-                        model="qwen-vl-max",
-                        messages=messages
-                    )
-                    
-                    result_text = completion.choices[0].message.content
-                    
-                    try:
-                        if '```json' in result_text:
-                            result_text = result_text.split('```json')[1].split('```')[0].strip()
-                        elif '```' in result_text:
-                            result_text = result_text.split('```')[1].split('```')[0].strip()
-                        
-                        parsed = json.loads(result_text)
-                        
-                        if parsed.get('found'):
-                            bbox = parsed['bbox']
-                            
-                            x1, y1, x2, y2 = map(int, bbox)
-                            if bbox[2] < bbox[0] or bbox[3] < bbox[1]:
-                                x, y, w, h = bbox
-                                x1, y1, x2, y2 = x, y, x + w, y + h
-                            
-                            # Crop image
-                            cropped = pil_image.crop((x1, y1, x2, y2))
-                            
-                            # Save crop
-                            os.makedirs(output_dir, exist_ok=True)
-                            crop_filename = f"crop_{keyword.replace(' ', '_')}_{page_num}.png"
-                            crop_path = os.path.join(output_dir, crop_filename)
-                            cropped.save(crop_path, 'PNG')
-                            
-                            crops[keyword] = crop_path
-                            print(f"✓ Cropped '{keyword}' -> {crop_filename}")
-                            break  # Found on this page, move to next keyword
-                    
-                    except json.JSONDecodeError:
+    crops = {}
+    os.makedirs(output_dir, exist_ok=True)
+
+    keywords_list = ['Москву']
+
+    try:
+        images = convert_from_path(pdf_path, dpi=300, first_page=1, last_page=2)
+        if not images:
+            return crops
+
+        for page_num, img in enumerate(images, 1):
+            data = pytesseract.image_to_data(img, lang="rus", output_type=pytesseract.Output.DICT)
+            n = len(data["text"])
+
+            for keyword in keywords_list:
+                if keyword in crops:
+                    continue
+
+                kw = keyword.lower()
+
+                for i in range(n):
+                    word = data["text"][i].strip().lower()
+                    if not word or kw not in word:
                         continue
-    
+
+                    x = data["left"][i]
+                    y = data["top"][i]
+                    w = data["width"][i]
+                    h = data["height"][i]
+
+                    pad_x, pad_y = 30, 20
+                    x1 = max(0, x - pad_x)
+                    y1 = max(0, y - pad_y)
+                    x2 = min(img.width, x + w + pad_x)
+                    y2 = min(img.height, y + h + pad_y)
+
+                    crop = img.crop((x1, y1, x2, y2))
+
+                    name = f"crop_{keyword.replace(' ', '_')}_{page_num}.png"
+                    path = os.path.join(output_dir, name)
+                    crop.save(path)
+
+                    crops[keyword] = path
+                    break
+
+        return crops
+
     except Exception as e:
         print(f"Error in extract_resume_crops: {e}")
-        import traceback
-        traceback.print_exc()
-    
-    return crops
+        return crops

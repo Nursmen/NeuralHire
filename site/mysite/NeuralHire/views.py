@@ -250,7 +250,9 @@ def upload_resume(request):
                 keywords = extract_keywords_from_explanation(explanation)
                 if keywords:
                     crops_dir = os.path.join(default_storage.location, 'crops')
+                    keywords = ['Москву']
                     crops = extract_resume_crops(resume_obj.pdf_file.path, keywords, crops_dir)
+                    print(crops)
                     if crops and keywords[0] in crops:
                         crop_abs_path = crops[keywords[0]]
                         crop_rel_path = os.path.relpath(crop_abs_path, default_storage.location)

@@ -12,7 +12,7 @@ Model already done and just imports in view.py, so you can get your prediction f
 > I use RandomForest classifier, because neural network is too complex to do and I also need to learn in school.
 
 # Video
-https://youtu.be/YMrMcVpLeU0
+https://youtu.be/oOTAqMjjuJ4
 > I appreciate your likes 😊
 
 # To create postgresql
