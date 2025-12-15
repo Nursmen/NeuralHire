@@ -1,3 +1,35 @@
+# Tesseract OCR Installation Guide for Windows
+
+## Error
+You're seeing: `Error in OCR: tesseract is not installed or it's not in your PATH. See README file for more information.`
+
+## Solution
+1. **Download Tesseract Installer**:
+   - Download the Windows installer from [UB-Mannheim/tesseract/wiki](https://github.com/UB-Mannheim/tesseract/wiki).
+   - Use the `tesseract-ocr-w64-setup-x.x.x.exe` (64-bit) version.
+
+2. **Run Installer**:
+   - Run the installer.
+   - **IMPORTANT**: Note the installation path (usually `C:\Program Files\Tesseract-OCR`).
+
+3. **Add to PATH** (Fix "tesseract is not in your PATH"):
+   - **Option A: Via PowerShell (Current Session)**
+     ```powershell
+     $env:PATH += ";C:\Program Files\Tesseract-OCR"
+     ```
+   - **Option B: Permanent (Recommended)**
+     1. Press `Win + X` -> "System" -> "Advanced system settings".
+     2. Click "Environment Variables".
+     3. Select "Path" under "System variables" -> "Edit" -> "New".
+     4. Paste: `C:\Program Files\Tesseract-OCR`
+     5. Click OK on all dialogs.
+     6. **Restart your terminal/IDE**.
+
+4. **Install Russian Language Data** (Required for NeuralHire):
+   - During installation, make sure to select "Russian" in the language data script options, or download `rus.traineddata` separately into `tessdata` folder.
+
+---
+
 # Quick Poppler Installation Guide for Windows
 
 ## Error

@@ -6,7 +6,7 @@ from utils.embeddings import (
     embed_query, rerank_results, compute_keyword_boost,
     create_job_text, create_job_summary, llm_validate_results
 )
-from utils.qwen_vl import summarize_resume, explain_job_match, extract_keywords_from_explanation, extract_resume_crops
+from utils.bert_processing import summarize_resume, extract_resume_crops
 import numpy as np
 import os
 
@@ -236,27 +236,25 @@ def upload_resume(request):
                 final_jobs.append(job_obj)
                 scores_list.append(round(candidate['score'], 4))
         
-        # Generate individual AI explanations for top 3 jobs
-        job_explanations = []
-        if final_jobs:
-            for i, job in enumerate(final_jobs[:3]):
-                explanation = explain_job_match(full_summary, job)
-                job_explanations.append(explanation)
-        
-        # Extract resume crops for top 3 jobs
+        # Extract resume crops (Hardcoded keywords logic is inside extract_resume_crops)
+        crops_dir = os.path.join(default_storage.location, 'crops')
         job_crops = {}
-        if final_jobs and job_explanations:
-            for i, (job, explanation) in enumerate(zip(final_jobs[:3], job_explanations)):
-                keywords = extract_keywords_from_explanation(explanation)
-                if keywords:
-                    crops_dir = os.path.join(default_storage.location, 'crops')
-                    keywords = ['Москву']
-                    crops = extract_resume_crops(resume_obj.pdf_file.path, keywords, crops_dir)
-                    print(crops)
-                    if crops and keywords[0] in crops:
-                        crop_abs_path = crops[keywords[0]]
-                        crop_rel_path = os.path.relpath(crop_abs_path, default_storage.location)
-                        job_crops[job.id] = crop_rel_path
+        # We just pass an empty list or dummy since the logic is hardcoded inside the function as per user request
+        crops = extract_resume_crops(resume_obj.pdf_file.path, [], crops_dir)
+        print(crops)
+        
+        # If we found crops, associate them with top jobs for display (simplified logic)
+        # Since we don't have per-job unique keywords (we only check for hardcoded ones like 'Moscow'),
+        # we can just attach the crop to all jobs or the first one if found.
+        # The previous logic attached specific crops to specific jobs based on the explanation.
+        # Here we just show the crop if found.
+        if crops and 'Москву' in crops:
+            crop_abs_path = crops['Москву']
+            crop_rel_path = os.path.relpath(crop_abs_path, default_storage.location)
+            # Assign to ALL top jobs to ensure it's visible? Or just first?
+            # User dashboard expects job_crops[job.id] = path
+            for job in final_jobs:
+                job_crops[job.id] = crop_rel_path
         
         if job_crops:
             resume_obj.crop_data = job_crops
@@ -272,7 +270,7 @@ def upload_resume(request):
                 'preferences': preferences,
                 'full_summary': full_summary
             },
-            'job_explanations': job_explanations,
+            'job_explanations': [],
             'job_crops': job_crops,
             'additions': list_of_additions,
         })

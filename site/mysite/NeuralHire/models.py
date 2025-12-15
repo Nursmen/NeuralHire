@@ -7,7 +7,7 @@ class Job(models.Model):
 
     content_embedding = ArrayField(
         models.FloatField(),      
-        size=384,                
+        size=768,                
         null=True,
         blank=True,
     )
@@ -43,7 +43,7 @@ class Resume(models.Model):
     # For vector search
     summary_embedding = ArrayField(
         models.FloatField(),
-        size=384,
+        size=768,
         null=True,
         blank=True,
     )

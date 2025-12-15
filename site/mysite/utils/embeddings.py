@@ -3,11 +3,16 @@ from sentence_transformers import SentenceTransformer, CrossEncoder
 import re
 import requests
 import json
-
-# Use multilingual-e5-small - designed for asymmetric search (query vs passage)
-# Properly handles different text types with instruction prefixes
-# 384 dimensions, excellent for Russian
-_model = SentenceTransformer('intfloat/multilingual-e5-small')
+import os 
+# Check for fine-tuned model
+_fine_tuned_path = r'site\mysite\fine_tuned_bert'
+if os.path.exists(_fine_tuned_path):
+    print(f"Loading fine-tuned BERT from {_fine_tuned_path}")
+    _model = SentenceTransformer(_fine_tuned_path)
+else:
+    print("Loading base BERT model")
+    # Use bert-base-multilingual-cased
+    _model = SentenceTransformer('google-bert/bert-base-multilingual-cased')
 
 # Cross-encoder for reranking - FREE, runs locally, much more accurate
 # Using multilingual mMARCO model - specifically trained for multilingual retrieval
@@ -96,8 +101,7 @@ def embed_text(text: str):
     if not cleaned:
         return None
 
-    # e5 models require "passage: " prefix for documents
-    return _model.encode(f"passage: {cleaned}", normalize_embeddings=True).tolist()
+    return _model.encode(cleaned, normalize_embeddings=True).tolist()
 
 
 def embed_job(title: str, knowledge: str, city: str = "",
@@ -108,8 +112,7 @@ def embed_job(title: str, knowledge: str, city: str = "",
     if not combined_text:
         return None
 
-    # e5 models require "passage: " prefix for documents being searched
-    return _model.encode(f"passage: {combined_text}", normalize_embeddings=True).tolist()
+    return _model.encode(combined_text, normalize_embeddings=True).tolist()
 
 
 def embed_query(query: str):
@@ -121,8 +124,7 @@ def embed_query(query: str):
     if not cleaned:
         return None
 
-    # e5 models require "query: " prefix for search queries
-    return _model.encode(f"query: {cleaned}", normalize_embeddings=True).tolist()
+    return _model.encode(cleaned, normalize_embeddings=True).tolist()
 
 
 def rerank_results(query: str, job_texts: list, top_k: int = 20) -> list:
@@ -239,7 +241,7 @@ def embed_texts_batch(texts):
     """Batch embed multiple texts (as passages)."""
     cleaned_texts = [preprocess_text(t) for t in texts]
     valid_indices = [i for i, t in enumerate(cleaned_texts) if t]
-    valid_texts = [f"passage: {cleaned_texts[i]}" for i in valid_indices]
+    valid_texts = [cleaned_texts[i] for i in valid_indices]
 
     if not valid_texts:
         return [None] * len(texts)
