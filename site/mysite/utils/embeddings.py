@@ -4,15 +4,30 @@ import re
 import requests
 import json
 import os 
-# Check for fine-tuned model
-_fine_tuned_path = r'site\mysite\fine_tuned_bert'
-if os.path.exists(_fine_tuned_path):
-    print(f"Loading fine-tuned BERT from {_fine_tuned_path}")
-    _model = SentenceTransformer(_fine_tuned_path)
-else:
-    print("Loading base BERT model")
-    # Use bert-base-multilingual-cased
-    _model = SentenceTransformer('google-bert/bert-base-multilingual-cased')
+# Global model variable (lazy loaded)
+_model = None
+
+def get_model():
+    """Lazy load the embedding model."""
+    global _model
+    if _model is not None:
+        return _model
+
+    # Construct path relative to this file
+    # utils/embeddings.py -> site/mysite/utils/embeddings.py
+    # We want site/mysite/fine_tuned_bert
+    base_dir = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+    fine_tuned_path = os.path.join(base_dir, 'fine_tuned_bert')
+
+    if os.path.exists(fine_tuned_path):
+        print(f"Loading fine-tuned BERT from {fine_tuned_path}")
+        _model = SentenceTransformer(fine_tuned_path)
+    else:
+        print("Loading base BERT model (lazy load)")
+        # Use bert-base-multilingual-cased
+        _model = SentenceTransformer('google-bert/bert-base-multilingual-cased')
+    
+    return _model
 
 # Cross-encoder for reranking - FREE, runs locally, much more accurate
 # Using multilingual mMARCO model - specifically trained for multilingual retrieval
@@ -101,7 +116,7 @@ def embed_text(text: str):
     if not cleaned:
         return None
 
-    return _model.encode(cleaned, normalize_embeddings=True).tolist()
+    return get_model().encode(cleaned, normalize_embeddings=True).tolist()
 
 
 def embed_job(title: str, knowledge: str, city: str = "",
@@ -112,7 +127,7 @@ def embed_job(title: str, knowledge: str, city: str = "",
     if not combined_text:
         return None
 
-    return _model.encode(combined_text, normalize_embeddings=True).tolist()
+    return get_model().encode(combined_text, normalize_embeddings=True).tolist()
 
 
 def embed_query(query: str):
@@ -124,7 +139,7 @@ def embed_query(query: str):
     if not cleaned:
         return None
 
-    return _model.encode(cleaned, normalize_embeddings=True).tolist()
+    return get_model().encode(cleaned, normalize_embeddings=True).tolist()
 
 
 def rerank_results(query: str, job_texts: list, top_k: int = 20) -> list:
@@ -246,7 +261,7 @@ def embed_texts_batch(texts):
     if not valid_texts:
         return [None] * len(texts)
 
-    embeddings = _model.encode(valid_texts, normalize_embeddings=True, show_progress_bar=True).tolist()
+    embeddings = get_model().encode(valid_texts, normalize_embeddings=True, show_progress_bar=True).tolist()
 
     results = [None] * len(texts)
     for idx, emb in zip(valid_indices, embeddings):

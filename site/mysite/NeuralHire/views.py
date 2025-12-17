@@ -6,7 +6,7 @@ from utils.embeddings import (
     embed_query, rerank_results, compute_keyword_boost,
     create_job_text, create_job_summary, llm_validate_results
 )
-from utils.bert_processing import summarize_resume, extract_resume_crops
+from utils.qwen_vl import summarize_resume, extract_resume_crops, explain_job_match
 import numpy as np
 import os
 
@@ -28,6 +28,7 @@ USE_LLM_VALIDATION = False
 
 
 def main(request):
+
     if request.method != "POST":
         return render(request, 'neuralhire/index.html', {'additions': list_of_additions})
 
@@ -108,12 +109,18 @@ def main(request):
     jobs_queryset = Job.objects.filter(id__in=top_ids)
     jobs_dict = {job.id: job for job in jobs_queryset}
 
-    final_jobs = []
-    scores_list = []
+    resume_context = user_query
+    print(final_candidates)
 
     for i, candidate in enumerate(final_candidates):
         job_obj = jobs_dict.get(candidate['id'])
         if job_obj:
+            # Generate explanation for top 3 results
+            if i < 3:
+                explanation = explain_job_match(resume_context, job_obj)
+                print(explanation)
+                job_obj.explanation = explanation if explanation else "Не удалось сгенерировать пояснение."
+            
             final_jobs.append(job_obj)
             score = final_scores[i] if i < len(final_scores) else 0.0
             scores_list.append(round(float(score), 4))

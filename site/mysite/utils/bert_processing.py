@@ -7,13 +7,19 @@ from pathlib import Path
 # Initialize summarization pipeline
 # Using a multilingual model suitable for Russian/English
 SUMMARIZATION_MODEL = "IlyaGusev/mbart_ru_sum_gazeta" # Good for Russian summarization
-# specific model or just 'summarization' pipeline which defaults to sshleifer/distilbart-cnn-12-6 (English)
-# Given the code has Russian prompts, we should use a Russian-capable model.
-try:
-    _summarizer = pipeline("summarization", model=SUMMARIZATION_MODEL)
-except Exception as e:
-    print(f"Warning: Could not load summarization model {SUMMARIZATION_MODEL}: {e}")
-    _summarizer = None
+_summarizer = None
+
+def get_summarizer():
+    """Lazy load the summarization pipeline."""
+    global _summarizer
+    if _summarizer is None:
+        try:
+            print(f"Loading summarization model: {SUMMARIZATION_MODEL}...")
+            _summarizer = pipeline("summarization", model=SUMMARIZATION_MODEL)
+        except Exception as e:
+            print(f"Warning: Could not load summarization model {SUMMARIZATION_MODEL}: {e}")
+            _summarizer = None
+    return _summarizer
 
 def ocr_pdf(pdf_path):
     """
@@ -48,10 +54,11 @@ def summarize_resume(pdf_path):
         
         summary_text = full_text # Default to full text if model fails
         
-        if _summarizer:
+        summarizer = get_summarizer()
+        if summarizer:
             try:
                 # MBART expects src_lang for translation but for summarization typically just text
-                summary_output = _summarizer(input_text, max_length=600, min_length=100, do_sample=False)
+                summary_output = summarizer(input_text, max_length=600, min_length=100, do_sample=False)
                 summary_text = summary_output[0]['summary_text']
             except Exception as e:
                 print(f"Summarization failed: {e}")
